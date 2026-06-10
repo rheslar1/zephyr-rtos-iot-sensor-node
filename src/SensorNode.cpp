@@ -39,6 +39,35 @@ std::string fixed2(const double value) {
   return stream.str();
 }
 
+std::string jsonEscape(std::string_view value) {
+  std::ostringstream escaped;
+
+  for (const char item : value) {
+    switch (item) {
+      case '\\':
+        escaped << "\\\\";
+        break;
+      case '"':
+        escaped << "\\\"";
+        break;
+      case '\n':
+        escaped << "\\n";
+        break;
+      case '\r':
+        escaped << "\\r";
+        break;
+      case '\t':
+        escaped << "\\t";
+        break;
+      default:
+        escaped << item;
+        break;
+    }
+  }
+
+  return escaped.str();
+}
+
 void addEvent(CycleResult& result,
               std::string step,
               const bool passed,
@@ -54,9 +83,9 @@ TelemetryFrame encodeTelemetry(const BoardProfile& board,
                                const SensorSample& sample) {
   std::ostringstream payload;
   payload << "{"
-          << "\"device\":\"" << config.deviceId << "\","
-          << "\"board\":\"" << board.boardTarget << "\","
-          << "\"firmware\":\"" << config.firmwareVersion << "\","
+          << "\"device\":\"" << jsonEscape(config.deviceId) << "\","
+          << "\"board\":\"" << jsonEscape(board.boardTarget) << "\","
+          << "\"firmware\":\"" << jsonEscape(config.firmwareVersion) << "\","
           << "\"uptime_ms\":" << sample.uptimeMs << ","
           << "\"temperature_c\":" << fixed1(sample.temperatureC) << ","
           << "\"humidity_pct\":" << fixed1(sample.humidityPct) << ","
@@ -100,6 +129,42 @@ bool validateProvisioning(const BoardProfile& board,
   if (provisioning.externalWifiBackhaul) {
     reason += ", external Wi-Fi backhaul enabled";
   }
+  return true;
+}
+
+bool validateConfig(const NodeConfig& config, std::string& reason) {
+  if (config.deviceId.empty()) {
+    reason = "device id is required";
+    return false;
+  }
+
+  if (config.firmwareVersion.empty()) {
+    reason = "firmware version is required";
+    return false;
+  }
+
+  if (config.samplePeriodMs < 1000U) {
+    reason = "sample period must be at least 1000 ms";
+    return false;
+  }
+
+  if (config.minBatteryMv < 1800U || config.minBatteryMv > 4200U) {
+    reason = "minimum battery threshold is outside Li-ion/coin-cell guard range";
+    return false;
+  }
+
+  if (config.maxAverageCurrentUa <= 0.0) {
+    reason = "average-current budget must be positive";
+    return false;
+  }
+
+  if (config.batteryCapacityMah == 0U) {
+    reason = "battery capacity is required for power projection";
+    return false;
+  }
+
+  reason = config.deviceId + " period=" + std::to_string(config.samplePeriodMs) +
+           " ms budget=" + fixed2(config.maxAverageCurrentUa) + " uA";
   return true;
 }
 
@@ -195,6 +260,12 @@ CycleResult ZephyrSensorNode::runCycle() {
   const bool boardOk = validateBoard(board_, reason);
   addEvent(result, "board-profile", boardOk, reason);
   if (!boardOk) {
+    return fail(reason);
+  }
+
+  const bool configOk = validateConfig(config_, reason);
+  addEvent(result, "node-config", configOk, reason);
+  if (!configOk) {
     return fail(reason);
   }
 

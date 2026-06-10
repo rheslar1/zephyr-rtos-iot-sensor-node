@@ -54,7 +54,7 @@ void acceptsNominalNrf52840Cycle() {
 
   assert(result.accepted);
   assert(result.failureReason == "cycle accepted");
-  assert(result.events.size() == 7U);
+  assert(result.events.size() == 8U);
   assert(transport.frames().size() == 1U);
   assert(contains(transport.frames().front().payload, "nrf52840dk/nrf52840"));
   assert(result.power.averageCurrentUa <= config().maxAverageCurrentUa);
@@ -74,6 +74,23 @@ void rejectsUnsupportedBoardTarget() {
 
   assert(!result.accepted);
   assert(contains(result.failureReason, "expected Zephyr board target"));
+  assert(transport.frames().empty());
+}
+
+void rejectsInvalidNodeConfig() {
+  auto nodeConfig = config();
+  nodeConfig.samplePeriodMs = 500U;
+  sensor_node::CapturingTelemetryTransport transport;
+
+  const auto result = runOnce(sensor_node::nrf52840DevelopmentKit(),
+                              nodeConfig,
+                              sensor_node::demoImage(),
+                              sensor_node::demoSample(),
+                              sensor_node::demoProvisioning(),
+                              transport);
+
+  assert(!result.accepted);
+  assert(contains(result.failureReason, "sample period"));
   assert(transport.frames().empty());
 }
 
@@ -110,6 +127,23 @@ void rejectsNativeWifiAssumption() {
   assert(contains(result.failureReason, "no native Wi-Fi"));
 }
 
+void rejectsInvalidCertificateFingerprint() {
+  auto provisioning = sensor_node::demoProvisioning();
+  provisioning.certificateFingerprint = "not-a-sha256";
+  sensor_node::CapturingTelemetryTransport transport;
+
+  const auto result = runOnce(sensor_node::nrf52840DevelopmentKit(),
+                              config(),
+                              sensor_node::demoImage(),
+                              sensor_node::demoSample(),
+                              provisioning,
+                              transport);
+
+  assert(!result.accepted);
+  assert(contains(result.failureReason, "certificate fingerprint"));
+  assert(transport.frames().empty());
+}
+
 void rejectsLowBatterySample() {
   auto sample = sensor_node::demoSample();
   sample.batteryMv = 2990U;
@@ -140,6 +174,40 @@ void reportsTelemetryTransportFailure() {
   assert(contains(result.failureReason, "offline"));
 }
 
+void rejectsPowerBudgetOverrun() {
+  auto nodeConfig = config();
+  nodeConfig.maxAverageCurrentUa = 3.0;
+  sensor_node::CapturingTelemetryTransport transport;
+
+  const auto result = runOnce(sensor_node::nrf52840DevelopmentKit(),
+                              nodeConfig,
+                              sensor_node::demoImage(),
+                              sensor_node::demoSample(),
+                              sensor_node::demoProvisioning(),
+                              transport);
+
+  assert(!result.accepted);
+  assert(contains(result.failureReason, "average"));
+  assert(transport.frames().size() == 1U);
+}
+
+void telemetryPayloadEscapesJsonStrings() {
+  auto nodeConfig = config();
+  nodeConfig.firmwareVersion = "2026.06.10 \"factory\"";
+  sensor_node::CapturingTelemetryTransport transport;
+
+  const auto result = runOnce(sensor_node::nrf52840DevelopmentKit(),
+                              nodeConfig,
+                              sensor_node::demoImage(),
+                              sensor_node::demoSample(),
+                              sensor_node::demoProvisioning(),
+                              transport);
+
+  assert(result.accepted);
+  assert(transport.frames().size() == 1U);
+  assert(contains(transport.frames().front().payload, "\\\"factory\\\""));
+}
+
 void reporterIncludesPowerEvidence() {
   sensor_node::CapturingTelemetryTransport transport;
   const auto result = runOnce(sensor_node::nrf52840DevelopmentKit(),
@@ -162,10 +230,14 @@ void reporterIncludesPowerEvidence() {
 int main() {
   acceptsNominalNrf52840Cycle();
   rejectsUnsupportedBoardTarget();
+  rejectsInvalidNodeConfig();
   rejectsUnsignedOrUnconfirmedImage();
   rejectsNativeWifiAssumption();
+  rejectsInvalidCertificateFingerprint();
   rejectsLowBatterySample();
   reportsTelemetryTransportFailure();
+  rejectsPowerBudgetOverrun();
+  telemetryPayloadEscapesJsonStrings();
   reporterIncludesPowerEvidence();
   return 0;
 }

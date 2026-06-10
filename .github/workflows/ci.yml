@@ -15,5 +15,12 @@ jobs:
         run: cmake --build build
       - name: Run sensor-node executable
         run: ./build/zephyr_rtos_iot_sensor_node
+      - name: Run expected failure modes
+        run: |
+          ! ./build/zephyr_rtos_iot_sensor_node --low-battery
+          ! ./build/zephyr_rtos_iot_sensor_node --offline
+          ! ./build/zephyr_rtos_iot_sensor_node --bad-cert
+          ! ./build/zephyr_rtos_iot_sensor_node --tight-power
+          ! ./build/zephyr_rtos_iot_sensor_node --unconfirmed-image
       - name: CTest
         run: ctest --test-dir build --output-on-failure
