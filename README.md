@@ -4,9 +4,7 @@ Edge sensor node with Zephyr threads, Wi-Fi/BLE provisioning, power-mode profili
 
 ## Portfolio Purpose
 
-This repository is an Embedded Systems project scaffold for the Rheslar portfolio. It is designed to become a hardware-backed project with build output, validation logs, and reviewable implementation evidence.
-
-All generated Embedded Systems repos are C++17-first and are framed around C++ design patterns and SOLID design principles.
+This repository implements a Zephyr-style IoT sensor node for the Nordic nRF52840 Development Kit. The root C++17 model is host-buildable for CI and mirrors the firmware responsibilities: BLE provisioning, MCUboot image validation, sensor sampling, secure telemetry framing, and low-power evidence. The `firmware/zephyr` folder contains the on-target Zephyr application slice for `nrf52840dk/nrf52840`.
 
 ## Stack
 
@@ -29,13 +27,23 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
+To build the Zephyr firmware from a Zephyr workspace:
+
+```bash
+west build -b nrf52840dk/nrf52840 firmware/zephyr
+west flash
+```
+
 ## Implementation Slices
 
-- C++17 starter executable that exposes the project identity, stack, and validation target.
-- Small strategy-style readiness check that keeps the scaffold aligned with C++ design patterns.
-- Architecture document with control boundaries, data flow, safety assumptions, and evidence plan.
-- CTest smoke test that keeps source, docs, and CI files present as the repo grows.
-- GitHub Actions workflow for configure, build, executable smoke run, and repository validation.
+- nRF52840 DK board profile using the Zephyr `nrf52840dk/nrf52840` target.
+- BLE provisioning gate with TLS endpoint and certificate fingerprint validation.
+- MCUboot running-image validation with signature, confirmation, rollback counter, and slot-size checks.
+- Sensor thread model with battery, temperature, humidity, pressure, and acceleration samples.
+- Telemetry thread model that emits compact QoS1 frames for secure backhaul.
+- nRF52840 power profiler estimating active, radio, and low-power sleep windows.
+- On-target Zephyr app skeleton with sensor and telemetry threads, BLE enablement, and LED heartbeat.
+- CTest coverage for accepted cycles, unsupported boards, unsigned images, Wi-Fi assumptions, low battery, telemetry failure, and power evidence.
 
 ## Evidence Target
 

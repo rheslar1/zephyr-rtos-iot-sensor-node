@@ -1,63 +1,43 @@
-#include <array>
+#include "sensor_node/SensorNode.hpp"
+
 #include <iostream>
-#include <string_view>
-
-class IReadinessRule {
- public:
-  virtual ~IReadinessRule() = default;
-  virtual bool passes(std::string_view evidenceTarget) const = 0;
-  virtual std::string_view name() const = 0;
-};
-
-class RequiredEvidenceRule final : public IReadinessRule {
- public:
-  bool passes(std::string_view evidenceTarget) const override {
-    return !evidenceTarget.empty();
-  }
-
-  std::string_view name() const override {
-    return "RequiredEvidenceRule";
-  }
-};
-
-struct ProjectProfile {
-  std::string_view title;
-  std::string_view summary;
-  std::string_view evidenceTarget;
-  std::array<std::string_view, 9> tags;
-};
-
-constexpr ProjectProfile profile{
-  "Zephyr RTOS IoT Sensor Node",
-  "Edge sensor node with Zephyr threads, Wi-Fi/BLE provisioning, power-mode profiling, encrypted telemetry, and signed OTA firmware updates.",
-  "Real concurrency, secure update flow, low-power design, and production-grade device lifecycle thinking.",
-  {
-    "C++17",
-    "C++ Design Patterns",
-    "SOLID",
-    "Zephyr RTOS",
-    "BLE",
-    "Wi-Fi",
-    "MCUboot",
-    "TLS",
-    "Power profiling"
-  }
-};
+#include <vector>
 
 int main() {
-  const RequiredEvidenceRule readinessRule;
+  auto board = sensor_node::nrf52840DevelopmentKit();
+  sensor_node::NodeConfig config{
+      "rheslar-nrf52840-001",
+      "2026.06.10-nrf52840",
+      60000U,
+      3200U,
+      70.0,
+      35.0,
+      220U};
+  auto image = sensor_node::demoImage();
+  sensor_node::ScriptedSensorReader sensors({sensor_node::demoSample()});
+  sensor_node::StaticProvisioningStore provisioning(
+      sensor_node::demoProvisioning());
+  sensor_node::CapturingTelemetryTransport transport;
+  sensor_node::McubootUpdateValidator updateValidator(40U);
+  sensor_node::Nrf52840PowerProfiler powerProfiler;
+  sensor_node::ZephyrSensorNode node(board,
+                                     config,
+                                     image,
+                                     sensors,
+                                     provisioning,
+                                     transport,
+                                     updateValidator,
+                                     powerProfiler);
+  sensor_node::TextCycleReporter reporter(std::cout);
 
-  std::cout << profile.title << '\n';
-  std::cout << "Summary: " << profile.summary << '\n';
-  std::cout << "Evidence target: " << profile.evidenceTarget << '\n';
-  std::cout << "Readiness rule: " << readinessRule.name() << '\n';
-  std::cout << "SOLID marker: C++17 strategy interface with replaceable readiness rule" << '\n';
-  std::cout << "Stack:";
+  std::cout << "Zephyr RTOS IoT Sensor Node\n";
+  std::cout << "Board target: " << board.boardTarget << '\n';
+  std::cout << "SoC: " << board.soc << '\n';
+  std::cout << "Radio: BLE + 802.15.4";
+  std::cout << ", Wi-Fi via external backhaul when provisioned\n\n";
 
-  for (std::size_t index = 0; index < profile.tags.size(); ++index) {
-    std::cout << ' ' << profile.tags[index] << (index + 1U == profile.tags.size() ? "" : ",");
-  }
+  const auto result = node.runCycle();
+  reporter.publish(result);
 
-  std::cout << '\n';
-  return readinessRule.passes(profile.evidenceTarget) ? 0 : 1;
+  return result.accepted ? 0 : 1;
 }

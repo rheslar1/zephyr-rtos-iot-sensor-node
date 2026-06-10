@@ -7,9 +7,17 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 enable_testing()
 
+add_library(sensor_node_core
+  src/SensorNode.cpp
+)
+target_include_directories(sensor_node_core PUBLIC include)
+target_compile_options(sensor_node_core PRIVATE -Wall -Wextra -Wpedantic)
+
 add_executable(${PROJECT_NAME} src/main.cpp)
+target_link_libraries(${PROJECT_NAME} PRIVATE sensor_node_core)
 target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -Wpedantic)
 
-add_executable(profile_tests tests/ProfileTests.cpp)
-target_compile_options(profile_tests PRIVATE -Wall -Wextra -Wpedantic)
-add_test(NAME profile_tests COMMAND profile_tests)
+add_executable(sensor_node_tests tests/SensorNodeTests.cpp)
+target_link_libraries(sensor_node_tests PRIVATE sensor_node_core)
+target_compile_options(sensor_node_tests PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME sensor_node_tests COMMAND sensor_node_tests)

@@ -6,41 +6,49 @@ Real concurrency, secure update flow, low-power design, and production-grade dev
 
 ## Runtime Shape
 
-1. Hardware or simulator input is sampled through a narrow driver boundary.
-2. A control profile normalizes state into a deterministic decision surface.
-3. Safety checks reject unsafe commands before they reach the actuator, transport, or update path.
-4. Telemetry and validation logs are emitted for repeatable review.
+1. The nRF52840 DK boots a confirmed MCUboot image.
+2. BLE provisioning supplies the device identity, secure endpoint, certificate fingerprint, and optional external Wi-Fi backhaul profile.
+3. A sensor thread samples battery, environmental, and motion data.
+4. A telemetry thread frames the latest sample for secure MQTT/HTTPS backhaul.
+5. A power profiler records active, radio, and sleep windows against the node budget.
+6. Validation logs are emitted for repeatable review in CI and during hardware bring-up.
 
 ## C++17 Design Shape
 
-- `ProjectProfile` owns project identity and evidence text.
-- `IReadinessRule` defines a narrow strategy interface for scaffold readiness checks.
-- `RequiredEvidenceRule` is a concrete strategy used by the starter executable and tests.
-- The scaffold keeps documentation, executable behavior, and validation concerns separated.
+- `ZephyrSensorNode` owns the cycle-level orchestration.
+- `ISensorReader`, `IProvisioningStore`, `ITelemetryTransport`, `IUpdateValidator`, and `IPowerProfiler` isolate hardware and network dependencies.
+- `McubootUpdateValidator` enforces signature, confirmation, rollback, and slot-size rules.
+- `Nrf52840PowerProfiler` models current draw for active work, radio transmission, and low-power sleep.
+- `ScriptedSensorReader` and `CapturingTelemetryTransport` make CI deterministic without a Zephyr SDK.
 
 ## SOLID Notes
 
-- Single Responsibility: profile data and readiness rules are separate.
-- Open/Closed: new readiness rules can be added without changing the profile object.
-- Liskov Substitution: any `IReadinessRule` can replace the default rule.
-- Interface Segregation: the readiness interface exposes only one focused operation.
-- Dependency Inversion: the executable consumes the readiness rule abstraction.
+- Single Responsibility: board profile, provisioning, sensor reads, telemetry, update checks, and power evidence are separated.
+- Open/Closed: real Zephyr adapters can replace host simulators without changing orchestration.
+- Liskov Substitution: simulator and hardware implementations share focused interfaces.
+- Interface Segregation: each runtime capability exposes only the methods the node needs.
+- Dependency Inversion: the node depends on abstractions instead of concrete drivers or transports.
 
 ## Boundaries
 
-- `src/`: native starter implementation and future device-specific drivers.
+- `include/sensor_node/`: host-testable domain model and interfaces.
+- `src/`: C++17 orchestration, simulators, power model, and CLI demo.
+- `firmware/zephyr/`: Zephyr RTOS application slice for `nrf52840dk/nrf52840`.
 - `docs/`: validation plans, timing notes, hardware captures, and acceptance evidence.
-- `tests/`: repo-level smoke tests and future simulator or host-side unit tests.
+- `tests/`: host-side cycle tests for safety gates and evidence.
 - `.github/workflows/`: CI entry point for build and validation evidence.
 
 ## Validation Plan
 
-- Build the host starter with CMake.
-- Run the executable and confirm the reported profile matches this repository.
-- Run CTest to validate the C++17 readiness scaffold.
-- Add hardware-specific logs after the first board, simulator, or bus test.
+- Build the host model with CMake.
+- Run the executable and confirm the nRF52840 cycle passes with power evidence.
+- Run CTest to validate board, provisioning, MCUboot, sensor, telemetry, and power gates.
+- Build and flash `firmware/zephyr` from a Zephyr workspace for the nRF52840 DK.
+- Add serial logs, BLE provisioning captures, and current measurements after hardware bring-up.
 - Capture CI, terminal, and hardware evidence for the portfolio detail page.
 
 ## Expansion Notes
 
-Replace the starter profile with the project-specific implementation slice while preserving the same review boundaries: build, tests, architecture notes, validation logs, and screenshots.
+- Replace host interfaces with concrete Zephyr drivers for sensors, settings/NVS, TLS sockets, MCUmgr, and PM hooks.
+- Add OpenThread support if the deployment uses the nRF52840 IEEE 802.15.4 radio.
+- Keep Wi-Fi as an external backhaul path because the nRF52840 DK does not provide native Wi-Fi.
